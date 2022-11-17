@@ -1,2 +1,2 @@
-scripts/img_align_celeba
-scripts/list_attr_celeba.txt
+scripts/data/img_align_celeba
+scripts/data/list_attr_celeba.txt

@@ -1,0 +1,11 @@
+PATH_IMGS: 'img_align_celeba/'
+
+ATTR_PATH: 'list_attr_celeba.txt'
+
+BATCH_SIZE: 128
+
+IMG_SIZE: (256,256)
+
+BATCH_SIZE: 128
+
+ONE_HOT: False
