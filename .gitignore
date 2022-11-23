@@ -1,2 +1,6 @@
 scripts/data/img_align_celeba
 scripts/data/list_attr_celeba.txt
+scripts/classifier_models
+scripts/0
+scripts/data/__pycache__
+scripts/__pycache__
