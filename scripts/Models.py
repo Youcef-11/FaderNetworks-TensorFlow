@@ -39,7 +39,7 @@ IMG_SIZE = eval(params.get('IMG_SIZE'))
 
 
 @tf.function
-def attr_loss_metrics(y, y_hat, used_loss=tf.keras.losses.BinaryCrossentropy()):
+def attr_loss(y, y_hat, used_loss=tf.keras.losses.BinaryCrossentropy()):
     """
     Compute the macro soft F1-score and the cost function across all labels.
     Use probability values instead of binary predictions.
@@ -52,17 +52,18 @@ def attr_loss_metrics(y, y_hat, used_loss=tf.keras.losses.BinaryCrossentropy()):
         cost (scalar Tensor): value of the cost function for the batch
         f1_score (scalar Tensor): value of the f1_score for the batch
     """
-    y = tf.cast(y, tf.float32)
+    # y = tf.cast(y, tf.float32)
     # y_hat = tf.cast(y_hat, tf.float32)
-    # y_hat = tf.reshape(y_hat,y.shape)
+    y_hat = tf.reshape(y_hat,y.shape)
     cost=0
-    tp = tf.reduce_sum(tf.round(y_hat) * y, axis=0)
-    fp = tf.reduce_sum(tf.round(y_hat) * (1 - y), axis=0)
-    fn = tf.reduce_sum(tf.round(1 - y_hat) * y, axis=0)
-    f1_score = 2*tp / (2*tp + fn + fp + 1e-16)
+    accuracy=0
+    # tp = tf.reduce_sum(tf.round(y_hat) * y, axis=0)
+    # fp = tf.reduce_sum(tf.round(y_hat) * (1 - y), axis=0)
+    # fn = tf.reduce_sum(tf.round(1 - y_hat) * y, axis=0)
+    # f1_score = 2*tp / (2*tp + fn + fp + 1e-16)
     for i in range(y.shape[1]):
       cost += used_loss(y[:,i],y_hat[:,i])
-    return cost, tf.reduce_mean(f1_score)
+    return cost
 
 
 
@@ -176,10 +177,11 @@ class Classifier(Model):
 
 
 
-    def compile(self, optimizer, loss_metrics=attr_loss_metrics):
+    def compile(self, optimizer, loss=attr_loss, metrics=tf.keras.metrics.BinaryAccuracy()):
         super(Classifier, self).compile()
         self.opt = optimizer
-        self.loss_metrics  = loss_metrics
+        self.loss  = loss
+        self.metrics = metrics
 
 
     @tf.function
@@ -188,7 +190,8 @@ class Classifier(Model):
 
         self.model.trainable = False
         y_preds = self.model(x)
-        loss, metrics = self.loss_metrics(y, y_preds)
+        loss = self.loss(y, y_preds)
+        metrics = self.metrics(y, y_preds)
         return loss, metrics
 
 
@@ -198,7 +201,8 @@ class Classifier(Model):
         self.model.trainable = True
         with tf.GradientTape() as tape:
             y_preds=self(x)
-            loss, metrics = self.loss_metrics(y, y_preds)
+            loss = self.loss(y, y_preds)
+            metrics = self.metrics(y, y_preds)
         grads = tape.gradient(loss, self.trainable_weights)
         self.opt.apply_gradients(zip(grads, self.trainable_weights))
 
@@ -222,7 +226,7 @@ class Classifier(Model):
         clf_preds = self.model(x_ae)
         clf_preds = [clf_preds[:, i] for i in attr_arg]
         fader.trainable = True
-        return attr_loss_metrics(1-y, clf_preds)
+        return self.loss(1-y, clf_preds), self.metrics(1-y, clf_preds)
     
     def fit(self, Data) :
 
@@ -347,11 +351,12 @@ class Fader(Model):
     def get_optimizers(self):
         return (self.ae_opt, self.dis_opt)
 
-    def compile(self, ae_opt, dis_opt, ae_loss, dis_loss=attr_loss_metrics):
+    def compile(self, ae_opt, dis_opt, ae_loss, dis_loss=attr_loss, dis_metrics = tf.keras.metrics.BinaryAccuracy()):
         super(Fader,self).compile()
         self.ae_opt = ae_opt
         self.dis_opt = dis_opt
         self.dis_loss = dis_loss
+        self.dis_metrics = dis_metrics
         self.ae_loss = ae_loss
 
     @tf.function
@@ -363,12 +368,12 @@ class Fader(Model):
         y_preds = self.discriminator(z)
 
         #Discriminator
-        dis_loss, dis_accuracy = self.dis_loss(y, y_preds)
+        dis_loss  = self.dis_loss(y, y_preds)
+        dis_accuracy = self.dis_metrics(y, y_preds)
 
         # Autoencodeodr
         ae_loss = self.ae_loss(x, decoded)
-        dis_loss_, _ = self.dis_loss(y, 1-y_preds)
-        ae_loss += dis_loss_*self.lambda_dis
+        ae_loss += self.dis_loss(y, 1-y_preds)*self.lambda_dis
 
         return ae_loss, dis_loss, dis_accuracy
 
@@ -389,7 +394,8 @@ class Fader(Model):
         z = self.ae(x)
         with tf.GradientTape() as tape:
             y_preds = self.discriminator(z)
-            dis_loss ,dis_accuracy = self.dis_loss(y, y_preds)
+            dis_loss  = self.dis_loss(y, y_preds)
+            dis_accuracy = self.dis_metrics(y, y_preds)
 
         grads = tape.gradient(dis_loss, self.discriminator.trainable_weights)
         self.dis_opt.apply_gradients(zip(grads, self.discriminator.trainable_weights))
@@ -403,7 +409,7 @@ class Fader(Model):
             z, decoded = self.ae(x,y)
             dis_preds = self.discriminator(z)
             ae_loss = self.ae_loss(x, decoded)
-            ae_loss += self.dis_loss(y, 1-dis_preds)[0]*self.lambda_dis
+            ae_loss += self.dis_loss(y, 1-dis_preds)*self.lambda_dis
         grads = tape.gradient(ae_loss, self.ae.trainable_weights)
         self.ae_opt.apply_gradients(zip(grads, self.ae.trainable_weights))
 
