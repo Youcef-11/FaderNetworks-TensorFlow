@@ -10,6 +10,6 @@ def getParams() :
         with open(path, 'r') as f:
             data = yaml.full_load(f)
     except:
-        raise("error opening params.yaml file")
+        raise ValueError("error opening params.yaml file")
 
     return data

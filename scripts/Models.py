@@ -11,10 +11,10 @@ import matplotlib.image as mpimg
 import matplotlib.pyplot as plt
 from termcolor import colored
 import random
-# gpus = tf.config.experimental.list_physical_devices('GPU')
-# print(gpus)
-# for gpu in gpus: 
-#     tf.config.experimental.set_memory_growth(gpu, True)
+
+gpus = tf.config.experimental.list_physical_devices('GPU')
+for gpu in gpus: 
+    tf.config.experimental.set_memory_growth(gpu, True)
 
 # Time for tensor board
 from time import time
@@ -23,9 +23,8 @@ from tensorflow.keras import Model
 # Bring in the sequential api for the generator and discriminator
 from tensorflow.keras.models import Sequential
 # Bring in the layers for the neural network
-from tensorflow.keras.layers import (Conv2D, Dense, Flatten, Reshape, ReLU, 
-                                    LeakyReLU, Dropout, UpSampling2D, 
-                                    BatchNormalization, Conv2DTranspose, Layer)
+from tensorflow.keras.layers import (Conv2D, Dense, Flatten, Reshape, ReLU, Activation,
+                                    LeakyReLU, Dropout, BatchNormalization, Conv2DTranspose)
 
 
 
@@ -37,55 +36,49 @@ warnings.simplefilter("ignore")
 params = getParams()
 IMG_SIZE = eval(params.get('IMG_SIZE'))
 
-@tf.function
-def compute_accuracy(yt,yp):
-    count = 0
-    for i in range(len(yp)):
-        if tf.argmax(yp[i]) == tf.argmax(yt[i]):
-            count+=1
-    return count/len(yp) 
+
 
 @tf.function
-def attr_loss_accuracy(y_true, y_preds, loss_funtion = tf.nn.softmax_cross_entropy_with_logits):
-    '''
-    Computes softmax cross entropy between logits and labels.
-
-    Measures the probability error in discrete classification tasks in which 
-    the classes are mutually exclusive (each entry is in exactly one class).
-
-    Here we have a Multi-Label classification tast which each label is coded in 2 bits
-    [1,0] : False or [0,1] : True 
-
+def attr_loss_metrics(y, y_hat, used_loss=tf.keras.losses.BinaryCrossentropy()):
+    """
+    Compute the macro soft F1-score and the cost function across all labels.
+    Use probability values instead of binary predictions.
+    
     Args:
-    y_true (int32 Tensor): targets array of shape (BATCH_SIZE, N_LABELS, 2)
-    y_preds (float32 Tensor): probability matrix from forward propagation of shape (BATCH_SIZE, N_LABELS, 2)
+        y (int32 Tensor): targets array of shape (BATCH_SIZE, N_LABELS)
+        y_hat (float32 Tensor): probability matrix from forward propagation of shape (BATCH_SIZE, N_LABELS)
         
     Returns:
         cost (scalar Tensor): value of the cost function for the batch
-        accuracy (scalar Tensor): value of the accuracy function for the batch
+        f1_score (scalar Tensor): value of the f1_score for the batch
+    """
+    y = tf.cast(y, tf.float32)
+    # y_hat = tf.cast(y_hat, tf.float32)
+    # y_hat = tf.reshape(y_hat,y.shape)
+    cost=0
+    tp = tf.reduce_sum(tf.round(y_hat) * y, axis=0)
+    fp = tf.reduce_sum(tf.round(y_hat) * (1 - y), axis=0)
+    fn = tf.reduce_sum(tf.round(1 - y_hat) * y, axis=0)
+    f1_score = 2*tp / (2*tp + fn + fp + 1e-16)
+    for i in range(y.shape[1]):
+      cost += used_loss(y[:,i],y_hat[:,i])
+    return cost, tf.reduce_mean(f1_score)
+
+
+
+def save_model_weights(model, h, file, acc):
     '''
-    bs = y_true.shape[0]
-    n_attr = y_true.shape[1]
-    loss = 0
-    accuracy = []
-
-    for i in range(0,n_attr):
-        yt = y_true[:,i]
-        yp = y_preds[:,i]
-        loss += tf.reduce_sum(loss_funtion(yt,yp))/bs
-        accuracy.append(compute_accuracy(yt, yp))
-
-
-    return loss, tf.reduce_mean(accuracy)
-
-
-def save_model_weights(model, name, folder_name ='models', get_optimizers = False):
+    Save model weights, params and history
+    Args:
+    model : tf model
+    file : str, classifier or fader or ae
     '''
-    Save model weights and params
-    '''
-    print("Saving Network Weights...")
-    model.save_weights(folder_name + '/' + name + '/' + 'weights')
-    np.save(folder_name + '/' + name + '/' + 'params', model.params)
+    print(colored("Saving Network Weights and History...","magenta"))
+    t = str(100*acc)
+    path = str(Path(__file__).parent)+'/'+params.get("MODELS_PATH")
+    model.save_weights(path+'/'+file+'_'+t+'/'+'weights')
+    np.save(path+'/'+file+'_'+t+'/'+'params', model.params)
+    np.save(path+'/'+file+'_'+t+'/'+'history', h)
 
 
 def enc_dec_model(params):
@@ -135,7 +128,7 @@ def enc_dec_model(params):
                         ReLU(),
                         Conv2DTranspose(3, kernel_size=4, strides=2, padding="same"),
                         BatchNormalization(),
-                        ReLU()
+                        Activation('tanh')
                         ], name = "decoder")
 
     return encoder, decoder
@@ -149,7 +142,7 @@ def discriminator(params):
                                 Dropout(0.3),
                                 Flatten(),
                                 Dense(512, activation=LeakyReLU(0.2)),
-                                Dense(len(params.get("ATTR")))
+                                Dense(len(params.get("ATTR")), activation='sigmoid')
                                ],
                                name = "discriminator")
     return discriminator
@@ -159,17 +152,23 @@ class Classifier(Model):
     '''
     Multi-label Classification
     Input : Images of shape (BATCH_SIZE, IMG_SIZE, IMG_SIZE, 3)
-    Output : y_preds (float32 Tensor) probability matrix from forward propagation of shape (BATCH_SIZE, N_LABELS, 2)
+    Output : y_preds (float32 Tensor) probability matrix from forward propagation of shape (BATCH_SIZE, N_LABELS)
     '''
-    def __init__(self, params):
+    def __init__(self, params, history=None):
         super(Classifier, self).__init__()
         self.params = params
+        if history:
+            self.history = history
+            self.best_metrics = self.history['val_loss'][-1]
+        else:
+            self.history = {'loss' : [], 'metrics': [], 'val_loss' : [], 'val_metrics' : []}
+            self.best_metrics = 0
+
         self.model, _ = enc_dec_model(params)
+        self.model.add(Dropout(0.3))
         self.model.add(Flatten())
         self.model.add(Dense(512))
-        self.model.add(LeakyReLU(0.2))
-        self.model.add(Dense(2*len(params.get("ATTR"))))
-        self.model.add(Reshape((len(params.get("ATTR")),2)))
+        self.model.add(Dense(len(params.get("ATTR")), activation='sigmoid'))
         # self.build((None, 256,256,3))
 
     def get_optimizers(self):
@@ -177,10 +176,11 @@ class Classifier(Model):
 
 
 
-    def compile(self, optimizer, loss_acc =attr_loss_accuracy):
+    def compile(self, optimizer, loss_metrics=attr_loss_metrics):
         super(Classifier, self).compile()
         self.opt = optimizer
-        self.loss_acc = loss_acc
+        self.loss_metrics  = loss_metrics
+
 
     @tf.function
     def eval_on_batch(self, data):
@@ -188,8 +188,8 @@ class Classifier(Model):
 
         self.model.trainable = False
         y_preds = self.model(x)
-        loss, acc= self.loss_acc(y, y_preds)
-        return loss, acc
+        loss, metrics = self.loss_metrics(y, y_preds)
+        return loss, metrics
 
 
     @tf.function
@@ -197,118 +197,84 @@ class Classifier(Model):
         x,y = data
         self.model.trainable = True
         with tf.GradientTape() as tape:
-            y_preds = self(x)
-            loss, acc= self.loss_acc(y, y_preds)
+            y_preds=self(x)
+            loss, metrics = self.loss_metrics(y, y_preds)
         grads = tape.gradient(loss, self.trainable_weights)
         self.opt.apply_gradients(zip(grads, self.trainable_weights))
 
-        return loss, acc
+        return loss, metrics
     
-    # @tf.function
-    # def eval_on_recons_attributes_batch(self, data, fader):
-    #     """
-    #     Le but de cette fonction est d'évaluer les performances du sur des images reconstruits avec des attibuts "hasardeux"
-    #     """
-    #     x,y = data
-    #     y_const = tf.identity(y)
+    @tf.function
+    def eval_fader_on_batch(self, data, fader):
+        """
+        This function evaluates the performance of the on images reconstructed with "random" attributes
+        """
+        x,y = data
+        fader.trainable = False
+        self.trainable = False
+
+        assert np.isin(fader.params.get("ATTR"), self.params.get("ATTR")).all()
+
+        attr_arg = np.where(np.isin(np.array(self.params.get("ATTR")), np.array(fader.params.get("ATTR"))))[0]
         
-    #     fader.trainable = False
-    #     self.trainable = False
-    #     # On verifie que les attributs pour le fader sont des attributs pour lesquels le classifier est entrainé
-    #     assert np.isin(fader.params.get("ATTR"), params.get("ATTR")).all()
-
-    #     z = fader.ae(x)
-    #     #Faire correspondre les attributs du classifier avec ceux du fader
-    #     loss = []
-    #     acc = []
-    #     bs = y.shape[0]
-    #     for i,attr in enumerate(fader.params.get("ATTR")):
-    #         j = 2*i
-    #         clf_ind = 2*self.params.get("ATTR").index(attr)
-    #         for v in range(2):
-    #             y.assign(y_const) 
-    #             y[:, j:j+2].assign(tf.zeros((bs,2))) # = 0
-    #             y[:, j+v].assign(tf.ones((bs))) # = 1
-    #             # y_copy = y.numpy()
-    #             # y_copy[:, j:j+2] = 0
-    #             # y_copy[:, j+v] = 1
-    #             output = fader.ae.decode(z, y_const)
-    #             if v == 0 : 
-    #                 clf_preds = self(output)[:, clf_ind : clf_ind +2]
-    #             else:
-    #                 clf_preds = tf.concat((clf_preds, self(output)[:, clf_ind: clf_ind +2]), 1)
-    #         l, a = attr_loss_accuracy(y, clf_preds)
-    #         loss.append(l)
-    #         acc.append(a)
-
-
-    #     fader.trainable = True
-    #     return tf.reduce_mean(loss), tf.reduce_mean(acc)
+        x_ae = fader.ae.predict(x, y = 1-y)
+        # Reconstuction
+        clf_preds = self.model(x_ae)
+        clf_preds = [clf_preds[:, i] for i in attr_arg]
+        fader.trainable = True
+        return attr_loss_metrics(1-y, clf_preds)
     
-    def fit(self, Data_train, Data_validation) :
-        history = {'train_loss' : [], 'train_acc': [], 'val_loss' : [], 'val_acc' : []}
-        best_acc = 0
+    def fit(self, Data) :
 
         n_epoch = params.get("N_EPOCH")
+        epoch_stop = 0
         for epoch in range(n_epoch):
-            print("Training...")
+            print(colored("Training Model...","blue"))
             loss = []
-            acc = []
-            for step, batch in enumerate(Data_train) :
+            metrics = []
+            for step, batch in enumerate(Data) :
                 t = time()
-                batch_x, batch_y  = batch
-                l,a = self.train_step((batch_x, batch_y))
+                l,a = self.train_step(batch)
 
                 loss.append(l)
-                acc.append(a)
-                print(f"epoch : {1 + epoch}/{n_epoch}, batch : {1 + step}/{Data_train.batch_number} : ", colored(f"acc = {a.numpy():.3f}, ","green"), colored(f"loss = {l.numpy():.3f}", "red"), "calculé en :", colored(f"{time() - t:.3f}s", "yellow"),end="\r")
-                    
-            history['train_loss'].append(np.mean(loss))
-            history['train_acc'].append(np.mean(acc))
-
-            #Eval loop 
-            loss = []
-            acc = []
-            print("Evaluating...:")
-            rand = random.choice(range(Data_validation.batch_number))
-            for step in range(params.get("BATCH_SIZE")):
+                metrics.append(a)
+                if step < Data.train_batch_number-1:
+                    print(f"epoch : {1 + epoch}/{n_epoch}, batch : {1 + step}/{Data.train_batch_number} : ", colored(f"metrics = {a.numpy():.3f}, ","green"), colored(f"loss = {l.numpy():.3f}", "red"), "calculé en :", colored(f"{time() - t:.3f}s", "yellow"), end="\r")
+                else:
+                    print(f"epoch : {1 + epoch}/{n_epoch}, batch : {1 + step}/{Data.train_batch_number} : ", colored(f"metrics = {a.numpy():.3f}, ","green"), colored(f"loss = {l.numpy():.3f}", "red"), "calculé en :", colored(f"{time() - t:.3f}s", "yellow"))
+            self.history['loss'].append(np.mean(loss))
+            self.history['metrics'].append(np.mean(metrics))
+            
+            print(colored("Evaluating Model...","blue"))
+            for step, batch in enumerate(Data.get_test_batches_iter()):
+                #Eval loop 
+                loss = []
+                metrics = []
                 t = time()
-
-                batch_x, batch_y = Data_validation[rand]
-                l, a= self.eval_on_batch((batch_x, batch_y))
+                #l, a= self.eval_on_batch(batch)
+                l, a= self.eval_on_batch(Data.get_random_test_batch())
                 loss.append(l)
-                acc.append(a)
+                metrics.append(a)
+                if step < Data.test_batch_number-1:
+                    print(f"validation batch : {1 + step}/{Data.test_batch_number} : ", colored(f"val_metrics = {a.numpy():.3f}, ","green"), colored(f"val_loss = {l.numpy():.3f}", "red"), "calculé en :", colored(f"{time() - t:.3f}s", "yellow"), end="\r")
+                else:
+                    print(f"validation batch : {1 + step}/{Data.test_batch_number} : ", colored(f"val_metrics = {a.numpy():.3f}, ","green"), colored(f"val_loss = {l.numpy():.3f}", "red"), "calculé en :", colored(f"{time() - t:.3f}s", "yellow"))
 
-            print(colored(f"val_acc = {np.mean(acc):.3f}, ","green"), colored(f"val_loss = {np.mean(loss):.3f}", "red"), "calculé en :", colored(f"{time() - t:.3f}s", "yellow"))
+            print("Evaluation results :", colored(f"val_metrics = {np.mean(metrics):.3f}, ","green"), colored(f"val_loss = {np.mean(loss):.3f}", "red"))
             
             # Peut nous permettre de tracer un graph.
-            history['val_loss'].append(np.mean(loss))
-            history['val_acc'].append(np.mean(acc))
+            self.history['val_loss'].append(np.mean(loss))
+            self.history['val_metrics'].append(np.mean(metrics))
 
-            if history['val_acc'][-1] > best_acc: 
-                best_acc = history['val_acc'][-1]
-                save_model_weights(self, name = 'classifier', folder_name=params.get("CLASSIFIER_PATH"))
+            if self.history['val_metrics'][-1] > self.best_metrics:
+                epoch_stop = epoch 
+                self.best_metrics = self.history['val_metrics'][-1]
+                save_model_weights(model=self, h=self.history, file='classifier', acc=self.best_metrics)
             
-        return history
-
-    def evaluate(self, Data_test) :
-        os.system('clear')
-        #Eval loop 
-        loss = []
-        acc = []
-        print("*"*20+"Evaluation:"+"*"*20)
-        for step, batch in enumerate(Data_test):
-            t = time()
-
-            batch_x, batch_y = batch
-            l, a= self.eval_on_batch((batch_x, batch_y))
-            loss.append(l)
-            acc.append(a)
-
-            print(f"batch : {1 + step}/{Data_test.batch_number} : ", colored(f"val_accuracy = {a.numpy():.2f}", "green"), colored(f"val_loss = {l.numpy():.2f}", "red"), "calculé en :", colored(f"{time() - t:.2f}s", "yellow"),end="\r")
-        
-        
-        print(colored(f"mean_val_accuracy = {np.mean(acc):.2f}, ","green"), colored(f"val_loss = {np.mean(loss):.2f}", "red"))
+            if abs(epoch-epoch_stop+1)>=10:
+                print(colored("Training finished...","blue"))
+                break
+            
 
     def call(self, x):
         x = self.model(x)
@@ -316,11 +282,13 @@ class Classifier(Model):
 
 class AutoEncoder(Model):
     """
-    La présence de cette classe est du au fait que le decoder a besoin de la represéntation latente z, et des attributs y pour reconstituer l'image avec l'attribut y 
+    The presence of this class is due to the fact that the decoder needs 
+    the latent representation z, and the attributes y to reconstitute 
+    the image with the attribute y 
     """
     def __init__(self, params):
         super(AutoEncoder, self).__init__()
-        self.encoder, self.decoder = enc_dec_model(len(params.get("ATTR")))
+        self.encoder, self.decoder = enc_dec_model(params)
         self.params= params
 
     def encode(self, x):
@@ -330,17 +298,20 @@ class AutoEncoder(Model):
         return (self.opt,)
 
     def decode(self, z, y):
-        # Le décodeur prend en entrée la concaténation de z et de y selon l'axe des colones
+        """
+        The decoder takes as input the concatenation of z and y along the column axis
 
-        # Pour certaine raison, le graph (eagerly mode = False) n'accepte pas le numpy array dans cette methode, on utilisera alors les tenseurs
-        y = tf.expand_dims(y, axis = 1)
-        y = tf.expand_dims(y, axis = 2)
-        y = tf.repeat(y, 2, axis = 1)
+        For some reason, the graph (eagerly mode = False) does not accept the numpy array in this method, so we will use the tensors
+        """
+        bs = y.shape[0]
+        y = tf.cast(y, tf.float32)
+        y = tf.expand_dims(y, axis = -1)
+        y = tf.expand_dims(y, axis = -1)
+        y = tf.repeat(y, 2, axis = -1)
         y = tf.repeat(y, 2, axis = 2)
-        # y = np.expand_dims(y,(1, 2))
-        # y = np.repeat(y, 2, axis = 1)
-        # y = np.repeat(y, 2, axis = 2)
-        zy = tf.concat((z,y), axis = -1)
+        z = tf.reshape(z,(bs,512,2,2))
+        zy = tf.concat((z,y), axis = 1)
+        zy = tf.reshape(zy,(bs,2,2,512+len(self.params.get("ATTR"))))
         return self.decoder(zy)
         
     
@@ -355,6 +326,12 @@ class AutoEncoder(Model):
             return self.decode(z,y)
         
         return z, self.decode(z, y)
+    
+
+    def predict(self, x, y):
+        self.trainable = False
+        z = self.encode(x)
+        return self.decode(z,y)
 
 
 class Fader(Model):
@@ -362,20 +339,15 @@ class Fader(Model):
         super(Fader, self).__init__()
         self.params = params
         self.ae = AutoEncoder(params)
-        self.discriminator = discriminator(params.n_attr)
+        self.discriminator = discriminator(params)
         self.n_iter = 0
         self.lambda_dis = 0
-    
-
-    # def set_optimizer_weights(self,weights):
-    #     self.ae_opt.set_weights(weights[0])
-    #     self.dis_opt.set_weights(weights[1])
 
 
     def get_optimizers(self):
         return (self.ae_opt, self.dis_opt)
 
-    def compile(self, ae_opt, dis_opt, ae_loss, dis_loss = attr_loss_accuracy):
+    def compile(self, ae_opt, dis_opt, ae_loss, dis_loss=attr_loss_metrics):
         super(Fader,self).compile()
         self.ae_opt = ae_opt
         self.dis_opt = dis_opt
@@ -395,15 +367,19 @@ class Fader(Model):
 
         # Autoencodeodr
         ae_loss = self.ae_loss(x, decoded)
-        ae_loss = ae_loss + dis_loss*self.lambda_dis
+        dis_loss_, _ = self.dis_loss(y, 1-y_preds)
+        ae_loss += dis_loss_*self.lambda_dis
 
         return ae_loss, dis_loss, dis_accuracy
 
     @tf.function
-    # Cette fonction peut s'apperler en utilisant model.fit mais on a préférer créer notre boucle d'entrainement personalisé danas main (notamment pour avoir le controle sur le chargement des données et donc la mémoire RAM)
+    
     def  train_step(self,data):
         """
-        Cette méthode est la version de train_step customisée pour avoir le controole total sur le training (notamment les batch)
+        This function can be applied using model.fit but we prefer to create our own custom training loop in main 
+        (especially to have control over the loading of data and therefore the RAM memory)
+
+        This method is the version of train_step customized to have total control over the training (especially the batch)
         """
         x,y = data
         #Training of the discriminator
@@ -427,7 +403,7 @@ class Fader(Model):
             z, decoded = self.ae(x,y)
             dis_preds = self.discriminator(z)
             ae_loss = self.ae_loss(x, decoded)
-            ae_loss = ae_loss + self.dis_loss(y, dis_preds)[0]*self.lambda_dis
+            ae_loss += self.dis_loss(y, 1-dis_preds)[0]*self.lambda_dis
         grads = tape.gradient(ae_loss, self.ae.trainable_weights)
         self.ae_opt.apply_gradients(zip(grads, self.ae.trainable_weights))
 
