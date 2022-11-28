@@ -2,7 +2,7 @@ PATH_IMGS: img_align_celeba/
 
 ATTR_PATH: list_attr_celeba.txt
 
-BATCH_SIZE: 32
+BATCH_SIZE: 256
 
 IMG_SIZE: (256,256)
 
@@ -10,48 +10,54 @@ SCALE_IMGS: True
 
 ONE_HOT: False
 
-N_EPOCH: 500
+N_EPOCH: 2000
 
-CLASSIFIER_PATH: classifier_models
+MODELS_PATH: models
+
+LOAD_MODEL: False
+
+CLASSIFIER_FILE: classifier_1669469208
+
+FADER_FILE:
 
 ATTR: 
-  - 5_o_Clock_Shadow 
-  - Arched_Eyebrows 
-  - Attractive 
-  - Bags_Under_Eyes 
-  - Bald 
-  - Bangs 
-  - Big_Lips 
-  - Big_Nose 
-  - Black_Hair 
-  - Blond_Hair 
-  - Blurry 
-  - Brown_Hair 
-  - Bushy_Eyebrows 
-  - Chubby 
-  - Double_Chin 
-  - Eyeglasses 
-  - Goatee 
-  - Gray_Hair 
-  - Heavy_Makeup 
-  - High_Cheekbones 
+  # - 5_o_Clock_Shadow 
+  # - Arched_Eyebrows 
+  # - Attractive 
+  # - Bags_Under_Eyes 
+  # - Bald 
+  # - Bangs 
+  # - Big_Lips 
+  # - Big_Nose 
+  # - Black_Hair 
+  # - Blond_Hair 
+  # - Blurry 
+  # - Brown_Hair 
+  # - Bushy_Eyebrows 
+  # - Chubby 
+  # - Double_Chin 
+  # - Eyeglasses 
+  # - Goatee 
+  # - Gray_Hair 
+  # - Heavy_Makeup 
+  # - High_Cheekbones 
   - Male 
-  - Mouth_Slightly_Open 
-  - Mustache 
-  - Narrow_Eyes 
-  - No_Beard 
-  - Oval_Face 
-  - Pale_Skin 
-  - Pointy_Nose 
-  - Receding_Hairline 
-  - Rosy_Cheeks 
-  - Sideburns 
-  - Smiling 
-  - Straight_Hair 
-  - Wavy_Hair 
-  - Wearing_Earrings 
-  - Wearing_Hat 
-  - Wearing_Lipstick 
-  - Wearing_Necklace 
-  - Wearing_Necktie 
-  - Young
+  # - Mouth_Slightly_Open 
+  # - Mustache 
+  # - Narrow_Eyes 
+  # - No_Beard 
+  # - Oval_Face 
+  # - Pale_Skin 
+  # - Pointy_Nose 
+  # - Receding_Hairline 
+  # - Rosy_Cheeks 
+  # - Sideburns 
+  # - Smiling 
+  # - Straight_Hair 
+  # - Wavy_Hair 
+  # - Wearing_Earrings 
+  # - Wearing_Hat 
+  # - Wearing_Lipstick 
+  # - Wearing_Necklace 
+  # - Wearing_Necktie 
+  # - Young
