@@ -41,7 +41,7 @@ if __name__ == '__main__':
         rand_img = random.choice(range(Data.batch_size))
         X, y = batch_x[rand_img], batch_y[rand_img]
         y_perso = deepcopy(y)
-        y_perso[3] = 1 - y[3]
+        y_perso = 1 - y
         X_recons = tf.squeeze(fader.ae.predict(tf.expand_dims(X,0),tf.expand_dims(y_perso,0)))
         X_recons = denormalize(X_recons)
         X = denormalize(X)
@@ -49,10 +49,10 @@ if __name__ == '__main__':
         plt.figure()
         plt.subplot(1,2,1)
         plt.imshow(X)
-        plt.title(f"Real : {attr[3]}:{y[3]}")
+        plt.title(f"Real : {attr[0]}:{y[0]}")
         plt.subplot(1,2,2)
         plt.imshow(X_recons)
-        plt.title(f"Fake : {attr[3]}:{y_perso[3]}")
+        plt.title(f"Fake : {attr[0]}:{y_perso[0]}")
         plt.show()
 
 
