@@ -366,7 +366,7 @@ class Fader(Model):
         dis_loss, dis_accuracy   = self.dis_loss_metrics(y, y_preds)
 
         # Autoencodeodr
-        ae_loss = self.ae_loss(x, decoded) + self.dis_loss_metrics(y, 1-y_preds)*self.lambda_dis
+        ae_loss = self.ae_loss(x, decoded) + self.dis_loss_metrics(y, 1-y_preds)[0]*self.lambda_dis
 
         return ae_loss, dis_loss, dis_accuracy
 

@@ -46,6 +46,7 @@ if __name__ == "__main__":
 
     if params.get('CLASSIFIER_FILE'):
         classifier, _ = load_model_histroy(file=params.get('CLASSIFIER_FILE'), train = False)
+        classifier.compile(optimizer= tf.keras.optimizers.RMSprop())
 
     f.compile(
         ae_opt= tf.keras.optimizers.Adam(learning_rate=0.0002),
