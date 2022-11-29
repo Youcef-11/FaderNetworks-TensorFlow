@@ -52,7 +52,7 @@ def attr_loss_metrics(y, y_hat, used_loss=tf.keras.losses.BinaryCrossentropy()):
         cost (scalar Tensor): value of the cost function for the batch
         f1_score (scalar Tensor): value of the f1_score for the batch
     """
-    # y = tf.cast(y, tf.float32)
+    y = tf.cast(y, tf.float32)
     # y_hat = tf.cast(y_hat, tf.float32)
     y_hat = tf.reshape(y_hat,y.shape)
     cost=0
@@ -222,7 +222,7 @@ class Classifier(Model):
         clf_preds = self.model(x_ae)
         clf_preds = [clf_preds[:, i] for i in attr_arg]
         fader.trainable = True
-        return self.loss(1-y, clf_preds), self.metrics(1-y, clf_preds)
+        return self.loss_metrics(1-y, clf_preds)
     
     def fit(self, Data) :
 
@@ -406,7 +406,7 @@ class Fader(Model):
         self.ae_opt.apply_gradients(zip(grads, self.ae.trainable_weights))
 
         self.n_iter+=1
-        self.lambda_dis = 0.0001*min(self.n_iter/500000, 1)
+        self.lambda_dis = min(self.n_iter/500000, 1)
         return ae_loss, dis_loss, dis_accuracy
 
 
