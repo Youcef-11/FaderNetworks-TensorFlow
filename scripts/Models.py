@@ -401,12 +401,12 @@ class Fader(Model):
         with tf.GradientTape() as tape:
             z, decoded = self.ae(x,y)
             dis_preds = self.discriminator(z)
-            ae_loss = self.ae_loss(x, decoded) + self.dis_loss_metrics(y, 1-dis_preds)[0]*self.lambda_dis
+            ae_loss = self.ae_loss(x, decoded) + self.dis_loss_metrics(y, 1-dis_preds)[0]
         grads = tape.gradient(ae_loss, self.ae.trainable_weights)
         self.ae_opt.apply_gradients(zip(grads, self.ae.trainable_weights))
 
         self.n_iter+=1
-        self.lambda_dis = min(self.n_iter/500000, 1)
+        #self.lambda_dis = min(self.n_iter/32000, 1)
         return ae_loss, dis_loss, dis_accuracy
 
 

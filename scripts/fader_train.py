@@ -48,15 +48,15 @@ if __name__ == "__main__":
         classifier, _ = load_model_histroy(file=params.get('CLASSIFIER_FILE'), train = False)
 
     f.compile(
-        ae_opt= tf.keras.optimizers.Adam(learning_rate=0.0002),
-        dis_opt= tf.keras.optimizers.Adam(learning_rate=0.0002),
+        ae_opt= tf.keras.optimizers.Adam(learning_rate=1e-4),
+        dis_opt= tf.keras.optimizers.Adam(learning_rate=1e-5),
         ae_loss = tf.keras.losses.MeanSquaredError()
     )
 
     random.seed(10)
     train_batch_number = 1000
     batchs_train = random.sample(range(Data.train_batch_number),train_batch_number)
-    batch_test_number = 30
+    batch_test_number = 50
     n_epoch = params.get("N_EPOCH")
 
     for epoch in range(n_epoch):
@@ -130,3 +130,5 @@ if __name__ == "__main__":
         elif params.get('CLASSIFIER_FILE') and history['classifier_acc'][-1] > best_val_acc:
             best_val_acc = history['classifier_acc'][-1]
             save_model_weights(model=f, h=history, file='fader_male_class', acc=best_val_acc)
+        else :
+            save_model_weights(model=f, h=history, file='fader_male', acc=history['classifier_acc'][-1])
