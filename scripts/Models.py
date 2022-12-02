@@ -340,9 +340,6 @@ class Fader(Model):
         self.params = params
         self.ae = AutoEncoder(params)
         self.discriminator = discriminator(params)
-        self.n_iter = 0
-        self.lambda_dis = 0
-
 
     def get_optimizers(self):
         return (self.ae_opt, self.dis_opt)
@@ -355,7 +352,7 @@ class Fader(Model):
         self.ae_loss = ae_loss
 
     @tf.function
-    def evaluate_on_val(self,data):
+    def evaluate_on_val(self,data, lambda_dis):
         x,y = data
         self.discriminator.trainable = False
         self.ae.trainable = False
@@ -366,13 +363,12 @@ class Fader(Model):
         dis_loss, dis_accuracy   = self.dis_loss_metrics(y, y_preds)
 
         # Autoencodeodr
-        ae_loss = self.ae_loss(x, decoded) + self.dis_loss_metrics(y, 1-y_preds)*self.lambda_dis
+        ae_loss = self.ae_loss(x, decoded) + self.dis_loss_metrics(y, 1-y_preds)[0]*lambda_dis
 
         return ae_loss, dis_loss, dis_accuracy
 
-    @tf.function
-    
-    def  train_step(self,data):
+    # @tf.function(input_signature=(tf.TensorSpec(shape=[None], dtype=tf.int32),))
+    def  train_step(self,data, lambda_dis):
         """
         This function can be applied using model.fit but we prefer to create our own custom training loop in main 
         (especially to have control over the loading of data and therefore the RAM memory)
@@ -401,12 +397,10 @@ class Fader(Model):
         with tf.GradientTape() as tape:
             z, decoded = self.ae(x,y)
             dis_preds = self.discriminator(z)
-            ae_loss = self.ae_loss(x, decoded) + self.dis_loss_metrics(y, 1-dis_preds)[0]
+            ae_loss = self.ae_loss(x, decoded) + self.dis_loss_metrics(y, 1-dis_preds)[0]*lambda_dis
         grads = tape.gradient(ae_loss, self.ae.trainable_weights)
         self.ae_opt.apply_gradients(zip(grads, self.ae.trainable_weights))
 
-        self.n_iter+=1
-        #self.lambda_dis = min(self.n_iter/32000, 1)
         return ae_loss, dis_loss, dis_accuracy
 
 

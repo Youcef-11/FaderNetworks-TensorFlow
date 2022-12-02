@@ -31,7 +31,7 @@ if __name__ == "__main__":
     Data = Data_loader(params, split=0.9)
 
     if params.get('FADER_FILE'):
-        f, history = load_model_histroy(file=params.get('FADER_FILE'), train = False)
+        f, history = load_model_histroy(file=params.get('FADER_FILE'), train = True)
         best_val_loss = history['ae_val_loss'][-1]
         best_val_acc = history['classifier_acc'][-1]
     else:
@@ -46,10 +46,11 @@ if __name__ == "__main__":
 
     if params.get('CLASSIFIER_FILE'):
         classifier, _ = load_model_histroy(file=params.get('CLASSIFIER_FILE'), train = False)
+        classifier.compile(optimizer= tf.keras.optimizers.RMSprop())
 
     f.compile(
-        ae_opt= tf.keras.optimizers.Adam(learning_rate=1e-4),
-        dis_opt= tf.keras.optimizers.Adam(learning_rate=1e-5),
+        ae_opt= tf.keras.optimizers.Adam(learning_rate=2e-4),
+        dis_opt= tf.keras.optimizers.Adam(learning_rate=2e-5),
         ae_loss = tf.keras.losses.MeanSquaredError()
     )
 
@@ -58,6 +59,8 @@ if __name__ == "__main__":
     batchs_train = random.sample(range(Data.train_batch_number),train_batch_number)
     batch_test_number = 50
     n_epoch = params.get("N_EPOCH")
+    lambda_dis = 0
+    n_iter = 0
 
     for epoch in range(n_epoch):
         print(colored("Training Model...","blue"))
@@ -68,16 +71,17 @@ if __name__ == "__main__":
 
         for step, batch in enumerate(batchs_train) :
             t = time()
-            ae_loss, dis_loss,  dis_acc= f.train_step(Data[batch])
+            ae_loss, dis_loss,  dis_acc = f.train_step(Data[batch], 0.003)
 
             ae_loss_tab.append(ae_loss)
             dis_loss_tab.append(dis_loss)
             dis_accuracy_tab.append(dis_acc)
             if step < train_batch_number-1:
-                print(f"epoch : {1 + epoch}/{n_epoch}, batch : {1 + step}/{train_batch_number} : ", colored(f"dis_accuracy = {dis_acc.numpy():.3f}, ","green"), colored(f"ae_loss : {ae_loss:.3f},", "red"), colored(f"dis_loss : {dis_loss:.3f},", "red") ,"calculé en :", colored(f"{time() - t:.3f}s", "yellow"), end="\r")
+                print(f"epoch : {1 + epoch}/{n_epoch}, batch : {1 + step}/{train_batch_number} : ", colored(f"dis_accuracy = {dis_acc.numpy():.3f}, ","green"), colored(f"ae_loss : {ae_loss:.3f},", "red"), colored(f"dis_loss : {dis_loss:.3f},", "red"), colored(f"lambda_dis : {lambda_dis:.6f},", "magenta") ,"calculé en :", colored(f"{time() - t:.3f}s", "yellow"), end='\r')
             else:
-                print(f"epoch : {1 + epoch}/{n_epoch}, batch : {1 + step}/{train_batch_number} : ", colored(f"dis_accuracy = {dis_acc.numpy():.3f}, ","green"), colored(f"ae_loss : {ae_loss:.3f},", "red"), colored(f"dis_loss : {dis_loss:.3f},", "red") ,"calculé en :", colored(f"{time() - t:.3f}s", "yellow"))
-
+                print(f"epoch : {1 + epoch}/{n_epoch}, batch : {1 + step}/{train_batch_number} : ", colored(f"dis_accuracy = {dis_acc.numpy():.3f}, ","green"), colored(f"ae_loss : {ae_loss:.3f},", "red"), colored(f"dis_loss : {dis_loss:.3f},", "red"), colored(f"lambda_dis : {lambda_dis:.6f},", "magenta") ,"calculé en :", colored(f"{time() - t:.3f}s", "yellow"))
+            n_iter += 1
+            lambda_dis = 0.002*min(n_iter/320, 1)
             
         history['ae_loss'].append(np.mean(ae_loss_tab))
         history['dis_loss'].append(np.mean(dis_loss_tab))
@@ -94,7 +98,7 @@ if __name__ == "__main__":
         for step in range(batch_test_number):
             t = time()
             batch = Data.get_random_test_batch()
-            ae_loss, dis_loss, dis_acc = f.evaluate_on_val(batch)
+            ae_loss, dis_loss, dis_acc = f.evaluate_on_val(batch, lambda_dis)
 
             if params.get('CLASSIFIER_FILE'):
                 clf_l, clf_a  = classifier.eval_fader_on_batch(batch, f)
@@ -106,16 +110,15 @@ if __name__ == "__main__":
             dis_val_accuracy.append(dis_acc)
 
             if step < batch_test_number-1:
-                print(f"epoch : {1 + epoch}/{n_epoch}, batch : {1 + step}/{batch_test_number} : ", colored(f"dis_accuracy = {dis_acc.numpy():.3f}, ","green"), colored(f"classifier_accuracy = {np.round(clf_a.numpy(),3) if params.get('CLASSIFIER_FILE') else None}, ","green"), colored(f"ae_loss : {ae_loss:.3f}", "red"), colored(f"dis_loss : {dis_loss:.3f}", "red") ,"calculé en :", colored(f"{time() - t:.3f}s", "yellow"), end="\r")
+                print(f"epoch : {1 + epoch}/{n_epoch}, batch : {1 + step}/{batch_test_number} : ", colored(f"dis_accuracy = {dis_acc.numpy():.3f}, ","green"), colored(f"classifier_accuracy = {clf_a.numpy():.4}, ","green"), colored(f"ae_loss : {ae_loss:.3f}", "red"), colored(f"dis_loss : {dis_loss:.3f}", "red") ,"calculé en :", colored(f"{time() - t:.3f}s", "yellow"),end='\r')
             else:
-                print(f"epoch : {1 + epoch}/{n_epoch}, batch : {1 + step}/{batch_test_number} : ", colored(f"dis_accuracy = {dis_acc.numpy():.3f}, ","green"), colored(f"classifier_accuracy = {np.round(clf_a.numpy(),3) if params.get('CLASSIFIER_FILE') else None}, ","green"), colored(f"ae_loss : {ae_loss:.3f}", "red"), colored(f"dis_loss : {dis_loss:.3f}", "red") ,"calculé en :", colored(f"{time() - t:.3f}s", "yellow"))
+                print(f"epoch : {1 + epoch}/{n_epoch}, batch : {1 + step}/{batch_test_number} : ", colored(f"dis_accuracy = {dis_acc.numpy():.3f}, ","green"), colored(f"classifier_accuracy = {clf_a.numpy():.4}, ","green"), colored(f"ae_loss : {ae_loss:.3f}", "red"), colored(f"dis_loss : {dis_loss:.3f}", "red") ,"calculé en :", colored(f"{time() - t:.3f}s", "yellow"))
 
         history['ae_val_loss'].append(np.mean(recon_val_loss))
         history['dis_val_loss'].append(np.mean(dis_val_loss))
         history['dis_val_accuracy'].append(np.mean(dis_val_accuracy))
         history['classifier_loss'].append(np.mean(clf_loss))
         history['classifier_acc'].append(np.mean(clf_acc))
-
 
 
 

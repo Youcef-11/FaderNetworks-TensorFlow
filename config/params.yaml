@@ -18,7 +18,7 @@ LOAD_MODEL: False
 
 CLASSIFIER_FILE: classifier_1669469208
 
-FADER_FILE: fader_male_86.55983209609985
+FADER_FILE: fader_male_93.6392068862915
 
 ATTR: 
   # - 5_o_Clock_Shadow 
