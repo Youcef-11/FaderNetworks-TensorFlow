@@ -169,10 +169,6 @@ class Classifier(Model):
         self.model.add(Flatten())
         self.model.add(Dense(512))
         self.model.add(Dense(len(params.get("ATTR")), activation='sigmoid'))
-        # self.build((None, 256,256,3))
-
-    def get_optimizers(self):
-        return (self.opt,)
 
 
 
@@ -185,7 +181,6 @@ class Classifier(Model):
     @tf.function
     def eval_on_batch(self, data):
         x,y = data
-
         self.model.trainable = False
         y_preds = self.model(x)
         loss, metrics = self.loss_metrics(y, y_preds)
@@ -206,9 +201,6 @@ class Classifier(Model):
     
     @tf.function
     def eval_fader_on_batch(self, data, fader):
-        """
-        This function evaluates the performance of the on images reconstructed with "random" attributes
-        """
         x,y = data
         fader.trainable = False
         self.trainable = False
@@ -225,7 +217,6 @@ class Classifier(Model):
         return self.loss_metrics(1-y, clf_preds)
     
     def fit(self, Data) :
-
         n_epoch = params.get("N_EPOCH")
         epoch_stop = 0
         for epoch in range(n_epoch):
@@ -251,7 +242,6 @@ class Classifier(Model):
                 loss = []
                 metrics = []
                 t = time()
-                #l, a= self.eval_on_batch(batch)
                 l, a= self.eval_on_batch(Data.get_random_test_batch())
                 loss.append(l)
                 metrics.append(a)
@@ -261,8 +251,7 @@ class Classifier(Model):
                     print(f"validation batch : {1 + step}/{Data.test_batch_number} : ", colored(f"val_metrics = {a.numpy():.3f}, ","green"), colored(f"val_loss = {l.numpy():.3f}", "red"), "calculé en :", colored(f"{time() - t:.3f}s", "yellow"))
 
             print("Evaluation results :", colored(f"val_metrics = {np.mean(metrics):.3f}, ","green"), colored(f"val_loss = {np.mean(loss):.3f}", "red"))
-            
-            # Peut nous permettre de tracer un graph.
+        
             self.history['val_loss'].append(np.mean(loss))
             self.history['val_metrics'].append(np.mean(metrics))
 
@@ -281,11 +270,6 @@ class Classifier(Model):
         return x
 
 class AutoEncoder(Model):
-    """
-    The presence of this class is due to the fact that the decoder needs 
-    the latent representation z, and the attributes y to reconstitute 
-    the image with the attribute y 
-    """
     def __init__(self, params):
         super(AutoEncoder, self).__init__()
         self.encoder, self.decoder = enc_dec_model(params)
@@ -294,15 +278,7 @@ class AutoEncoder(Model):
     def encode(self, x):
         return self.encoder(x)
 
-    def get_optimizers(self):
-        return (self.opt,)
-
     def decode(self, z, y):
-        """
-        The decoder takes as input the concatenation of z and y along the column axis
-
-        For some reason, the graph (eagerly mode = False) does not accept the numpy array in this method, so we will use the tensors
-        """
         bs = y.shape[0]
         y = tf.cast(y, tf.float32)
         y = tf.expand_dims(y, axis = -1)
@@ -316,14 +292,11 @@ class AutoEncoder(Model):
         
     
 
-    def call(self, x, y = None, mode = ''):
+    def call(self, x, y = None):
         z = self.encode(x)
 
         if y is None:
             return z
-        
-        if mode == 'decode':
-            return self.decode(z,y)
         
         return z, self.decode(z, y)
     
@@ -359,38 +332,26 @@ class Fader(Model):
         z, decoded = self.ae(x,y)
         y_preds = self.discriminator(z)
 
-        #Discriminator
         dis_loss, dis_accuracy   = self.dis_loss_metrics(y, y_preds)
 
-        # Autoencodeodr
         ae_loss = self.ae_loss(x, decoded) + self.dis_loss_metrics(y, 1-y_preds)[0]*lambda_dis
 
         return ae_loss, dis_loss, dis_accuracy
 
     # @tf.function(input_signature=(tf.TensorSpec(shape=[None], dtype=tf.int32),))
     def  train_step(self,data, lambda_dis):
-        """
-        This function can be applied using model.fit but we prefer to create our own custom training loop in main 
-        (especially to have control over the loading of data and therefore the RAM memory)
-
-        This method is the version of train_step customized to have total control over the training (especially the batch)
-        """
         x,y = data
-        #Training of the discriminator
         self.discriminator.trainable = True
         self.ae.trainable = False
 
         z = self.ae(x)
         with tf.GradientTape() as tape:
             y_preds = self.discriminator(z)
-            #Discriminator
             dis_loss, dis_accuracy   = self.dis_loss_metrics(y, y_preds)
 
         grads = tape.gradient(dis_loss, self.discriminator.trainable_weights)
         self.dis_opt.apply_gradients(zip(grads, self.discriminator.trainable_weights))
 
-
-        #Training of the autoencdoer
         self.discriminator.trainable = False
         self.ae.trainable = True
 

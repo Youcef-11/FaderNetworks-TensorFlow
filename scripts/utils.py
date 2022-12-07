@@ -14,31 +14,6 @@ from data import getParams
 
 params = getParams()
 
-# def vstack(array1, array2):
-#     try:
-#         new_array = np.vstack((array1,array2))
-#     except ValueError:
-#         if len(array1) == 0:
-#             return array2
-#         elif len(array2) == 0:
-#             return array1
-
-#     return new_array
-
-# def hstack(array1, array2):
-#     try:
-#         new_array = np.hstack((array1,array2))
-#     except ValueError:
-#         if len(array1) == 0:
-#             return array2
-#         elif len(array2) == 0:
-#             return array1
-
-#     return new_array
-
-
-
-
 
 def denormalize(image):
     im = np.array(image)

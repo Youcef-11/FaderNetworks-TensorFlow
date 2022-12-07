@@ -87,7 +87,6 @@ if __name__ == "__main__":
         history['dis_loss'].append(np.mean(dis_loss_tab))
         history['dis_accuracy'].append(np.mean(dis_accuracy_tab))
 
-        # Validation
         recon_val_loss = []
         dis_val_loss = []
         dis_val_accuracy = []
@@ -121,12 +120,7 @@ if __name__ == "__main__":
         history['classifier_acc'].append(np.mean(clf_acc))
 
 
-
-        # Save the best model at each time
-        # We have 2 criteria for saving the model, the one that reconstructs the best (smallest reconstruction loss)
-        # And the one whose trained classifier recognizes the attributes used to reconstruct the image
         if history['ae_val_loss'][-1] < best_val_loss:
-            # En réalité il suffit de sauvegarder l'autoencoder, le discriminator ne servant a rien pour l'inférance
             best_val_loss = history['ae_val_loss'][-1]
             save_model_weights(model=f, h=history, file='fader_male_loss', acc=history['classifier_acc'][-1])
 
