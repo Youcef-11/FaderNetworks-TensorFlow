@@ -47,17 +47,20 @@ CelebA to be downloaded from
 https://mmlab.ie.cuhk.edu.hk/projects/CelebA.html
 ```
 
-## Training the classifier is only important for the training of fader network.
+## Classifier
+Training the classifier is only important for the training of fader network
 ```
 ./classifier.py #to train the classifier
 ```
 
-## Put the name of the trained classifier folder in params.yaml file
+## Train Fadernetwork 
+Put the name of the trained classifier folder in params.yaml file
 ```
 ./fader_train.py #to train the fader
 ```
 
-##  Put the name of the trained fader folder in params.yaml file
+## Inference
+Put the name of the trained fader folder in params.yaml file
 ```
 ./main.py #to see results
 ```
