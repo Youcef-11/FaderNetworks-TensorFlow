@@ -29,7 +29,7 @@ Our approach is based on an encoder-decoder and discriminator architecture where
 <p align="center"><a href=https://github.com/Youcef-11/FaderNetworks-TensorFlow/blob/master/results/Decoder_Diagram.png?raw=true><img width="100%" src="./results/Decoder_Diagram.png" /></a></p>
 
 ## Dicriminator Architecture
-<p align="center"><a href=https://github.com/Youcef-11/FaderNetworks-TensorFlow/blob/master/results/Discriminateur_Diagram1.png?raw=true><img width="100%" src="./results/Discriminateur_Diagram1.png.png" /></a></p>
+<p align="center"><a href=https://github.com/Youcef-11/FaderNetworks-TensorFlow/blob/master/results/Discriminateur_Diagram1.png?raw=true><img width="100%" src="./results/Discriminateur_Diagram1.png" /></a></p>
 
 
 ## Model Results
@@ -59,5 +59,5 @@ https://mmlab.ie.cuhk.edu.hk/projects/CelebA.html
 
 ##  Put the name of the trained fader folder in params.yaml file
 ```
-$ ./main.py #to see results
+./main.py #to see results
 ```
